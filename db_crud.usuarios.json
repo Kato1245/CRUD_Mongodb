@@ -1,0 +1,32 @@
+[{
+  "_id": {
+    "$oid": "67d9c34967b3ede3927a497c"
+  },
+  "nombre": "Vendedor",
+  "email": "vendedor@gmail.com",
+  "contraseña": "venta1234"
+},
+{
+  "_id": {
+    "$oid": "67d9c37367b3ede3927a497d"
+  },
+  "nombre": "Thomas",
+  "email": "thomas@gmail.com",
+  "contraseña": "1234"
+},
+{
+  "_id": {
+    "$oid": "67daf2c077be07bcbaa5acd1"
+  },
+  "nombre": "dsds",
+  "email": "thomasss@gmail.com",
+  "contraseña": "123qweasdzxc"
+},
+{
+  "_id": {
+    "$oid": "67dafdcaea35af970c45c404"
+  },
+  "nombre": "juan",
+  "email": "ricardooquendo00@gmail.com",
+  "contraseña": "4321"
+}]
