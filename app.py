@@ -16,7 +16,7 @@ def index():
         if session['email'] == 'vendedor@gmail.com':
             return redirect(url_for('productos'))
         else:
-            return redirect(url_for('productos_usuario'))
+            return redirect(url_for('productos_usuario'))  # Redirige a la vista de productos para usuarios normales
     return redirect(url_for('login'))
 
 # Login
@@ -33,7 +33,7 @@ def login():
                 if email == 'vendedor@gmail.com':
                     return redirect(url_for('productos'))
                 else:
-                    return redirect(url_for('productos_usuario'))
+                    return redirect(url_for('productos_usuario'))  # Redirige a la vista de productos para usuarios normales
             else:
                 flash('Contraseña incorrecta', 'error')
         else:
@@ -125,6 +125,41 @@ def productos_usuario():
     productos = db['productos'].find()
     return render_template('productos_usuario.html', productos=productos)
 
+# Realizar pedido (usuarios normales)
+@app.route('/realizar_pedido', methods=['GET', 'POST'])
+def realizar_pedido():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        producto = request.form['producto']
+        cantidad = int(request.form['cantidad'])  # Convertir a entero
+        cliente = session['email']  # El cliente es el usuario que ha iniciado sesión
+
+        # Verificar si el producto existe y tiene suficiente cantidad
+        producto_db = db['productos'].find_one({'nombre': producto})
+        if producto_db and int(producto_db['cantidad']) >= cantidad:  # Convertir a entero
+            # Crear el pedido
+            numero_pedido = str(len(list(db['pedidos'].find()))) + "-" + cliente  # Número de pedido único
+            pedido = Pedido(numero_pedido, producto, cantidad, cliente)
+            db['pedidos'].insert_one(pedido.toDBCollection())
+
+            # Actualizar la cantidad del producto en la base de datos
+            db['productos'].update_one(
+                {'nombre': producto},
+                {'$set': {'cantidad': str(int(producto_db['cantidad']) - cantidad)}}  # Convertir a entero y luego a cadena
+            )
+
+            flash('Pedido realizado con éxito', 'success')
+        else:
+            flash('No hay suficiente cantidad disponible o el producto no existe', 'error')
+
+        return redirect(url_for('productos_usuario'))
+
+    # Si es GET, mostrar la lista de productos disponibles
+    productos = db['productos'].find()
+    return render_template('realizar_pedido.html', productos=productos)
+
 # Pedidos para usuarios normales
 @app.route('/pedidos_usuario')
 def pedidos_usuario():
@@ -145,7 +180,7 @@ def pedidos():
     pedidos = db['pedidos'].find()
     return render_template('pedidos.html', pedidos=pedidos)
 
-# Agregar pedido
+# Agregar pedido (vendedor)
 @app.route('/pedidos', methods=['POST'])
 def addPedido():
     if 'username' not in session:
@@ -185,43 +220,6 @@ def editPedido(numero_pedido):
             {'$set': {'producto': producto, 'cantidad': cantidad, 'cliente': cliente}}
         )
     return redirect(url_for('pedidos'))
-
-# Usuarios (vista del vendedor)
-@app.route('/usuarios')
-def usuarios():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    if session['email'] != 'vendedor@gmail.com':
-        return redirect(url_for('productos_usuario'))
-    usuarios = db['usuarios'].find()
-    return render_template('usuarios.html', usuarios=usuarios)
-
-# Eliminar usuario (vendedor)
-@app.route('/delete_usuario/<string:usuario_nombre>')
-def deleteUsuario(usuario_nombre):
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    if session['email'] != 'vendedor@gmail.com':
-        return redirect(url_for('productos_usuario'))
-    db['usuarios'].delete_one({'nombre': usuario_nombre})
-    return redirect(url_for('usuarios'))
-
-# Editar usuario (vendedor)
-@app.route('/edit_usuario/<string:usuario_nombre>', methods=['POST'])
-def editUsuario(usuario_nombre):
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    if session['email'] != 'vendedor@gmail.com':
-        return redirect(url_for('productos_usuario'))
-    nombre = request.form['nombre']
-    email = request.form['email']
-    contraseña = request.form['contraseña']
-    if nombre and email and contraseña:
-        db['usuarios'].update_one(
-            {'nombre': usuario_nombre},
-            {'$set': {'nombre': nombre, 'email': email, 'contraseña': contraseña}}
-        )
-    return redirect(url_for('usuarios'))
 
 # Perfil
 @app.route('/perfil')
