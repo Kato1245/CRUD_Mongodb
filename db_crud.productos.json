@@ -1,0 +1,32 @@
+[{
+  "_id": {
+    "$oid": "67d9c42267b3ede3927a497e"
+  },
+  "nombre": "Teclado",
+  "precio": "10000",
+  "cantidad": "3"
+},
+{
+  "_id": {
+    "$oid": "67d9c85fc6097df5f9356e07"
+  },
+  "nombre": "pantalla",
+  "precio": "5000",
+  "cantidad": "60"
+},
+{
+  "_id": {
+    "$oid": "67db13e139b5f72918164fe6"
+  },
+  "nombre": "USB",
+  "precio": "30000",
+  "cantidad": "50"
+},
+{
+  "_id": {
+    "$oid": "67db144d39b5f72918164fe7"
+  },
+  "nombre": "Mouse",
+  "precio": "17000",
+  "cantidad": "20"
+}]
