@@ -133,7 +133,7 @@ def realizar_pedido():
 
     if request.method == 'POST':
         producto = request.form['producto']
-        cantidad = int(request.form['cantidad'])  # Convertir a entero
+        cantidad = int(request.form['cantidad'])
         cliente = session['email']  # El cliente es el usuario que ha iniciado sesión
 
         # Verificar si el producto existe y tiene suficiente cantidad
@@ -220,6 +220,27 @@ def editPedido(numero_pedido):
             {'$set': {'producto': producto, 'cantidad': cantidad, 'cliente': cliente}}
         )
     return redirect(url_for('pedidos'))
+
+# Usuarios (vista del vendedor)
+@app.route('/usuarios')
+def usuarios():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    if session['email'] != 'vendedor@gmail.com':
+        return redirect(url_for('productos_usuario'))
+    usuarios = db['usuarios'].find()
+    return render_template('usuarios.html', usuarios=usuarios)
+
+# Eliminar usuario (vendedor)
+@app.route('/delete_usuario/<string:usuario_nombre>')
+def deleteUsuario(usuario_nombre):
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    if session['email'] != 'vendedor@gmail.com':
+        return redirect(url_for('productos_usuario'))
+    db['usuarios'].delete_one({'nombre': usuario_nombre})
+    flash('Usuario eliminado correctamente', 'success')
+    return redirect(url_for('usuarios'))
 
 # Perfil
 @app.route('/perfil')
