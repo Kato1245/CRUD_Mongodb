@@ -1,0 +1,18 @@
+[{
+  "_id": {
+    "$oid": "67daf79aea35af970c45c403"
+  },
+  "numero_pedido": "1-thomas@gmail.com",
+  "producto": "Teclado",
+  "cantidad": 2,
+  "cliente": "thomas@gmail.com"
+},
+{
+  "_id": {
+    "$oid": "67dafdf4ea35af970c45c405"
+  },
+  "numero_pedido": "2-ricardooquendo00@gmail.com",
+  "producto": "pantalla",
+  "cantidad": 6,
+  "cliente": "ricardooquendo00@gmail.com"
+}]
