@@ -3,20 +3,74 @@ import database as dbase
 from product import Product
 from usuario import Usuario
 from pedido import Pedido
-
-db = dbase.dbConnection()
+from mysql.connector import Error
 
 app = Flask(__name__)
-app.secret_key = 'tu_clave_secreta_aqui'  # Clave secreta para manejar sesiones
+app.secret_key = 'tu_clave_secreta_aqui'
 
-# Ruta principal (redirige al login)
+# Crear tablas si no existen
+def create_tables():
+    conn = dbase.dbConnection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            # Tabla usuarios
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    nombre VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL UNIQUE,
+                    contraseña VARCHAR(255) NOT NULL
+                )
+            """)
+            
+            # Tabla productos
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS productos (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    nombre VARCHAR(255) NOT NULL,
+                    precio DECIMAL(10, 2) NOT NULL,
+                    cantidad INT NOT NULL
+                )
+            """)
+            
+            # Tabla pedidos
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pedidos (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    numero_pedido VARCHAR(255) NOT NULL,
+                    producto VARCHAR(255) NOT NULL,
+                    cantidad INT NOT NULL,
+                    cliente VARCHAR(255) NOT NULL
+                )
+            """)
+            
+            # Insertar usuario vendedor si no existe
+            cursor.execute("SELECT * FROM usuarios WHERE email = 'vendedor@gmail.com'")
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO usuarios (nombre, email, contraseña)
+                    VALUES ('Vendedor', 'vendedor@gmail.com', 'vendedor123')
+                """)
+            
+            conn.commit()
+        except Error as e:
+            print(f"Error al crear tablas: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
+# Crear tablas al iniciar
+create_tables()
+
+# Ruta principal
 @app.route('/')
 def index():
     if 'username' in session:
         if session['email'] == 'vendedor@gmail.com':
             return redirect(url_for('productos'))
         else:
-            return redirect(url_for('productos_usuario'))  # Redirige a la vista de productos para usuarios normales
+            return redirect(url_for('productos_usuario'))
     return redirect(url_for('login'))
 
 # Login
@@ -25,19 +79,29 @@ def login():
     if request.method == 'POST':
         email = request.form['email']
         contraseña = request.form['contraseña']
-        usuario = db['usuarios'].find_one({'email': email})
-        if usuario:
-            if usuario['contraseña'] == contraseña:
-                session['username'] = usuario['nombre']
-                session['email'] = usuario['email']
-                if email == 'vendedor@gmail.com':
-                    return redirect(url_for('productos'))
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor(dictionary=True)
+            try:
+                cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+                usuario = cursor.fetchone()
+                if usuario:
+                    if usuario['contraseña'] == contraseña:
+                        session['username'] = usuario['nombre']
+                        session['email'] = usuario['email']
+                        if email == 'vendedor@gmail.com':
+                            return redirect(url_for('productos'))
+                        else:
+                            return redirect(url_for('productos_usuario'))
+                    else:
+                        flash('Contraseña incorrecta', 'error')
                 else:
-                    return redirect(url_for('productos_usuario'))  # Redirige a la vista de productos para usuarios normales
-            else:
-                flash('Contraseña incorrecta', 'error')
-        else:
-            flash('Esta cuenta no existe. Por favor, regístrate.', 'error')
+                    flash('Esta cuenta no existe. Por favor, regístrate.', 'error')
+            except Error as e:
+                print(f"Error al hacer login: {e}")
+            finally:
+                cursor.close()
+                conn.close()
     return render_template('login.html')
 
 # Registro
@@ -47,13 +111,27 @@ def register():
         nombre = request.form['nombre']
         email = request.form['email']
         contraseña = request.form['contraseña']
-        if db['usuarios'].find_one({'email': email}):
-            flash('El usuario ya existe.', 'error')
-        else:
-            usuario = Usuario(nombre, email, contraseña)
-            db['usuarios'].insert_one(usuario.toDBCollection())
-            flash('Registro exitoso. Inicia sesión.', 'success')
-            return redirect(url_for('login'))
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+                if cursor.fetchone():
+                    flash('El usuario ya existe.', 'error')
+                else:
+                    cursor.execute("""
+                        INSERT INTO usuarios (nombre, email, contraseña)
+                        VALUES (%s, %s, %s)
+                    """, (nombre, email, contraseña))
+                    conn.commit()
+                    flash('Registro exitoso. Inicia sesión.', 'success')
+                    return redirect(url_for('login'))
+            except Error as e:
+                print(f"Error al registrar usuario: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return render_template('register.html')
 
 # Logout
@@ -70,7 +148,19 @@ def productos():
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
-    productos = db['productos'].find()
+    
+    conn = dbase.dbConnection()
+    productos = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM productos")
+            productos = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener productos: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('productos.html', productos=productos)
 
 # Agregar producto (vendedor)
@@ -80,12 +170,27 @@ def addProduct():
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
+    
     nombre = request.form['nombre']
     precio = request.form['precio']
     cantidad = request.form['cantidad']
+    
     if nombre and precio and cantidad:
-        product = Product(nombre, precio, cantidad)
-        db['productos'].insert_one(product.toDBCollection())
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    INSERT INTO productos (nombre, precio, cantidad)
+                    VALUES (%s, %s, %s)
+                """, (nombre, precio, cantidad))
+                conn.commit()
+            except Error as e:
+                print(f"Error al agregar producto: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return redirect(url_for('productos'))
 
 # Eliminar producto (vendedor)
@@ -95,7 +200,19 @@ def deleteProduct(product_name):
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
-    db['productos'].delete_one({'nombre': product_name})
+    
+    conn = dbase.dbConnection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM productos WHERE nombre = %s", (product_name,))
+            conn.commit()
+        except Error as e:
+            print(f"Error al eliminar producto: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
     return redirect(url_for('productos'))
 
 # Editar producto (vendedor)
@@ -105,14 +222,28 @@ def editProduct(product_name):
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
+    
     nombre = request.form['nombre']
     precio = request.form['precio']
     cantidad = request.form['cantidad']
+    
     if nombre and precio and cantidad:
-        db['productos'].update_one(
-            {'nombre': product_name},
-            {'$set': {'nombre': nombre, 'precio': precio, 'cantidad': cantidad}}
-        )
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE productos 
+                    SET nombre = %s, precio = %s, cantidad = %s
+                    WHERE nombre = %s
+                """, (nombre, precio, cantidad, product_name))
+                conn.commit()
+            except Error as e:
+                print(f"Error al editar producto: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return redirect(url_for('productos'))
 
 # Productos para usuarios normales
@@ -122,7 +253,19 @@ def productos_usuario():
         return redirect(url_for('login'))
     if session['email'] == 'vendedor@gmail.com':
         return redirect(url_for('productos'))
-    productos = db['productos'].find()
+    
+    conn = dbase.dbConnection()
+    productos = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM productos")
+            productos = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener productos: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('productos_usuario.html', productos=productos)
 
 # Realizar pedido (usuarios normales)
@@ -134,30 +277,61 @@ def realizar_pedido():
     if request.method == 'POST':
         producto = request.form['producto']
         cantidad = int(request.form['cantidad'])
-        cliente = session['email']  # El cliente es el usuario que ha iniciado sesión
+        cliente = session['email']
 
-        # Verificar si el producto existe y tiene suficiente cantidad
-        producto_db = db['productos'].find_one({'nombre': producto})
-        if producto_db and int(producto_db['cantidad']) >= cantidad:  # Convertir a entero
-            # Crear el pedido
-            numero_pedido = str(len(list(db['pedidos'].find()))) + "-" + cliente  # Número de pedido único
-            pedido = Pedido(numero_pedido, producto, cantidad, cliente)
-            db['pedidos'].insert_one(pedido.toDBCollection())
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor(dictionary=True)
+            try:
+                # Verificar producto y cantidad
+                cursor.execute("SELECT * FROM productos WHERE nombre = %s", (producto,))
+                producto_db = cursor.fetchone()
+                
+                if producto_db and producto_db['cantidad'] >= cantidad:
+                    # Crear número de pedido único
+                    cursor.execute("SELECT COUNT(*) as total FROM pedidos")
+                    total_pedidos = cursor.fetchone()['total']
+                    numero_pedido = f"{total_pedidos}-{cliente}"
 
-            # Actualizar la cantidad del producto en la base de datos
-            db['productos'].update_one(
-                {'nombre': producto},
-                {'$set': {'cantidad': str(int(producto_db['cantidad']) - cantidad)}}  # Convertir a entero y luego a cadena
-            )
+                    # Insertar pedido
+                    cursor.execute("""
+                        INSERT INTO pedidos (numero_pedido, producto, cantidad, cliente)
+                        VALUES (%s, %s, %s, %s)
+                    """, (numero_pedido, producto, cantidad, cliente))
 
-            flash('Pedido realizado con éxito', 'success')
-        else:
-            flash('No hay suficiente cantidad disponible o el producto no existe', 'error')
+                    # Actualizar cantidad de producto
+                    nueva_cantidad = producto_db['cantidad'] - cantidad
+                    cursor.execute("""
+                        UPDATE productos 
+                        SET cantidad = %s 
+                        WHERE nombre = %s
+                    """, (nueva_cantidad, producto))
 
+                    conn.commit()
+                    flash('Pedido realizado con éxito', 'success')
+                else:
+                    flash('No hay suficiente cantidad disponible o el producto no existe', 'error')
+            except Error as e:
+                print(f"Error al realizar pedido: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
         return redirect(url_for('productos_usuario'))
 
-    # Si es GET, mostrar la lista de productos disponibles
-    productos = db['productos'].find()
+    # GET: Mostrar productos disponibles
+    conn = dbase.dbConnection()
+    productos = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM productos")
+            productos = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener productos: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('realizar_pedido.html', productos=productos)
 
 # Pedidos para usuarios normales
@@ -167,7 +341,19 @@ def pedidos_usuario():
         return redirect(url_for('login'))
     if session['email'] == 'vendedor@gmail.com':
         return redirect(url_for('pedidos'))
-    pedidos = db['pedidos'].find({'cliente': session['email']})
+    
+    conn = dbase.dbConnection()
+    pedidos = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM pedidos WHERE cliente = %s", (session['email'],))
+            pedidos = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener pedidos: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('pedidos_usuario.html', pedidos=pedidos)
 
 # Pedidos (vista del vendedor)
@@ -177,7 +363,19 @@ def pedidos():
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('pedidos_usuario'))
-    pedidos = db['pedidos'].find()
+    
+    conn = dbase.dbConnection()
+    pedidos = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM pedidos")
+            pedidos = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener pedidos: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('pedidos.html', pedidos=pedidos)
 
 # Agregar pedido (vendedor)
@@ -185,13 +383,30 @@ def pedidos():
 def addPedido():
     if 'username' not in session:
         return redirect(url_for('login'))
+    if session['email'] != 'vendedor@gmail.com':
+        return redirect(url_for('pedidos_usuario'))
+    
     numero_pedido = request.form['numero_pedido']
     producto = request.form['producto']
     cantidad = request.form['cantidad']
     cliente = request.form['cliente']
+    
     if numero_pedido and producto and cantidad and cliente:
-        pedido = Pedido(numero_pedido, producto, cantidad, cliente)
-        db['pedidos'].insert_one(pedido.toDBCollection())
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    INSERT INTO pedidos (numero_pedido, producto, cantidad, cliente)
+                    VALUES (%s, %s, %s, %s)
+                """, (numero_pedido, producto, cantidad, cliente))
+                conn.commit()
+            except Error as e:
+                print(f"Error al agregar pedido: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return redirect(url_for('pedidos'))
 
 # Eliminar pedido (vendedor)
@@ -201,7 +416,19 @@ def deletePedido(numero_pedido):
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('pedidos_usuario'))
-    db['pedidos'].delete_one({'numero_pedido': numero_pedido})
+    
+    conn = dbase.dbConnection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM pedidos WHERE numero_pedido = %s", (numero_pedido,))
+            conn.commit()
+        except Error as e:
+            print(f"Error al eliminar pedido: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
     return redirect(url_for('pedidos'))
 
 # Editar pedido (vendedor)
@@ -211,14 +438,28 @@ def editPedido(numero_pedido):
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('pedidos_usuario'))
+    
     producto = request.form['producto']
     cantidad = request.form['cantidad']
     cliente = request.form['cliente']
+    
     if producto and cantidad and cliente:
-        db['pedidos'].update_one(
-            {'numero_pedido': numero_pedido},
-            {'$set': {'producto': producto, 'cantidad': cantidad, 'cliente': cliente}}
-        )
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET producto = %s, cantidad = %s, cliente = %s
+                    WHERE numero_pedido = %s
+                """, (producto, cantidad, cliente, numero_pedido))
+                conn.commit()
+            except Error as e:
+                print(f"Error al editar pedido: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return redirect(url_for('pedidos'))
 
 # Usuarios (vista del vendedor)
@@ -228,7 +469,19 @@ def usuarios():
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
-    usuarios = db['usuarios'].find()
+    
+    conn = dbase.dbConnection()
+    usuarios = []
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM usuarios")
+            usuarios = cursor.fetchall()
+        except Error as e:
+            print(f"Error al obtener usuarios: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('usuarios.html', usuarios=usuarios)
 
 # Eliminar usuario (vendedor)
@@ -238,8 +491,21 @@ def deleteUsuario(usuario_nombre):
         return redirect(url_for('login'))
     if session['email'] != 'vendedor@gmail.com':
         return redirect(url_for('productos_usuario'))
-    db['usuarios'].delete_one({'nombre': usuario_nombre})
-    flash('Usuario eliminado correctamente', 'success')
+    
+    conn = dbase.dbConnection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM usuarios WHERE nombre = %s", (usuario_nombre,))
+            conn.commit()
+            flash('Usuario eliminado correctamente', 'success')
+        except Error as e:
+            print(f"Error al eliminar usuario: {e}")
+            flash('Error al eliminar usuario', 'error')
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
     return redirect(url_for('usuarios'))
 
 # Perfil
@@ -247,7 +513,19 @@ def deleteUsuario(usuario_nombre):
 def perfil():
     if 'username' not in session:
         return redirect(url_for('login'))
-    usuario = db['usuarios'].find_one({'email': session['email']})
+    
+    conn = dbase.dbConnection()
+    usuario = None
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM usuarios WHERE email = %s", (session['email'],))
+            usuario = cursor.fetchone()
+        except Error as e:
+            print(f"Error al obtener perfil: {e}")
+        finally:
+            cursor.close()
+            conn.close()
     return render_template('perfil.html', usuario=usuario)
 
 # Actualizar perfil
@@ -255,17 +533,32 @@ def perfil():
 def updatePerfil():
     if 'username' not in session:
         return redirect(url_for('login'))
+    
     nombre = request.form['nombre']
     email = request.form['email']
     contraseña = request.form['contraseña']
+    
     if nombre and email and contraseña:
-        db['usuarios'].update_one(
-            {'email': session['email']},
-            {'$set': {'nombre': nombre, 'email': email, 'contraseña': contraseña}}
-        )
-        session['username'] = nombre
-        session['email'] = email
-        flash('Perfil actualizado correctamente', 'success')
+        conn = dbase.dbConnection()
+        if conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE usuarios 
+                    SET nombre = %s, email = %s, contraseña = %s
+                    WHERE email = %s
+                """, (nombre, email, contraseña, session['email']))
+                conn.commit()
+                session['username'] = nombre
+                session['email'] = email
+                flash('Perfil actualizado correctamente', 'success')
+            except Error as e:
+                print(f"Error al actualizar perfil: {e}")
+                flash('Error al actualizar perfil', 'error')
+                conn.rollback()
+            finally:
+                cursor.close()
+                conn.close()
     return redirect(url_for('perfil'))
 
 # Eliminar perfil
@@ -273,10 +566,23 @@ def updatePerfil():
 def deletePerfil():
     if 'username' not in session:
         return redirect(url_for('login'))
-    db['usuarios'].delete_one({'email': session['email']})
-    session.pop('username', None)
-    session.pop('email', None)
-    flash('Tu cuenta ha sido eliminada', 'success')
+    
+    conn = dbase.dbConnection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM usuarios WHERE email = %s", (session['email'],))
+            conn.commit()
+            session.pop('username', None)
+            session.pop('email', None)
+            flash('Tu cuenta ha sido eliminada', 'success')
+        except Error as e:
+            print(f"Error al eliminar perfil: {e}")
+            flash('Error al eliminar cuenta', 'error')
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
