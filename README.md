@@ -133,6 +133,14 @@ app.config["MONGO_URI"] = "mongodb://localhost:27017/nombre_db"  # Conexión a M
 - Para Atlas, reemplaza:
 	- usuario:contraseña por tus credenciales reales
 	- clusterX por el nombre de tu cluster
+- **Usuario administrador por defecto**: 
+   - Email: `vendedor@gmail.com`
+   - Contraseña: `vendedor123`
+   - **¡Debe estar registrado en la base de datos!**
+   - Este usuario tiene acceso privilegiado a:
+     - Gestión completa de productos
+     - Visualización de todos los pedidos
+     - Administración de usuarios
 
 ## 🚀Ejecutar el Proyecto
 
