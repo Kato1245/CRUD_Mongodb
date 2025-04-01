@@ -15,12 +15,16 @@ Asegúrate de tener instalado lo siguiente:
 
 ### 1. Python
 - Versión 3.8 o superior.
+  ```
       # Verificar instalación:
       python --version  # o python3 --version
+  ```
 
 ### 2. PIP (Gestor de paquetes de Python)
 - Debe estar incluido con Python. Actualízalo:
+    ```
       pip install --upgrade pip
+    ```
   
 ### 3. MongoDB
 - Instala MongoDB Community Edition según tu SO:
