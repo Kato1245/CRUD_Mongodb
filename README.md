@@ -5,7 +5,7 @@
 Este proyecto consiste en el desarrollo de una aplicación web básica que implementa las operaciones CRUD (*Create, Read, Update, Delete*) utilizando:  
 - **Flask** como *microframework* web de Python.
 - **MongoDB** como base de datos NoSQL para el almacenamiento de datos.
-- **HTML** y **CSS** para la interfaz de usuario frontal.
+- **HTML** y **BOOTSTRAP** para la interfaz de usuario.
 
 El propósito es demostrar la integración de estas tecnologías en un entorno práctico, aplicando buenas prácticas de desarrollo. Además, se utiliza **Git y GitHub** para el control de versiones, siguiendo un flujo de trabajo organizado (commits descriptivos, estructura de repositorio clara, etc.)
 
