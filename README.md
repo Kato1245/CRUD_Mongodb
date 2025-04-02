@@ -5,7 +5,7 @@
 Este proyecto consiste en el desarrollo de una aplicación web básica que implementa las operaciones CRUD (*Create, Read, Update, Delete*) utilizando:  
 - **Flask** como *microframework* web de Python.
 - **MySQL** como base de datos relacional para el almacenamiento de datos.
-- **HTML** y **CSS** para la interfaz de usuario frontal.
+- **HTML** y **BOOTSTRAP** para la interfaz de usuario.
 
 ## 🛠Requisitos previos
 
